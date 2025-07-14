@@ -37,3 +37,9 @@ lerna-debug.log*
 
 dbTestJson
 uploads
+/generated/prisma
+
+.env*
+.flaskenv*
+!.env.project
+!.env.vault

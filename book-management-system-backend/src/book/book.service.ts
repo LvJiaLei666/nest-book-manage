@@ -2,64 +2,71 @@ import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { DbService } from '../db/db.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
-import { Book } from './entities/book.entity';
+import { Book } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class BookService {
   @Inject(DbService)
   dbService: DbService;
 
-  async list() {
-    return this.dbService.read();
+  @Inject(PrismaService)
+  prisma: PrismaService;
+
+  async list(query: {
+    page: number;
+    pageSize: number;
+    search: string;
+  }): Promise<Book[]> {
+    const { page = 1, pageSize = 10, search = '' } = query;
+    return await this.prisma.book.findMany({
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      where: {
+        name: {
+          contains: search,
+        },
+      },
+    });
   }
 
-  async findById(id: number) {
-    const lists: Book[] = await this.dbService.read();
-    return lists.find((item) => item.id === id);
+  async findById(id: number): Promise<Book> {
+    return await this.prisma.book.findUniqueOrThrow({
+      where: {
+        id,
+      },
+    });
   }
 
   async create(createBookDto: CreateBookDto) {
-    const books: Book[] = await this.dbService.read();
-    const maxId =
-      books.length > 0 ? Math.max(...books.map((item) => item.id)) : 0;
-    const id = maxId + 1;
-    const book = new Book();
-    book.id = id;
-    book.name = createBookDto.name;
-    book.author = createBookDto.author;
-    book.description = createBookDto.description;
-    book.cover = createBookDto.cover;
+    const hasSameName = await this.prisma.book.findUnique({
+      where: {
+        name: createBookDto.name,
+      },
+    });
+    if (hasSameName) {
+      throw new BadRequestException('Book name already exists');
+    }
 
-    books.push(book);
-    await this.dbService.write(books);
-
-    return book;
+    return await this.prisma.book.create({
+      data: createBookDto,
+    });
   }
 
   async update(updateBookDto: UpdateBookDto) {
-    const books: Book[] = await this.dbService.read();
-    const id = updateBookDto.id;
-    const findBook = books.find((item) => item.id === id);
-    if (!findBook) {
-      throw new BadRequestException('书籍不存在');
-    }
-
-    findBook.name = updateBookDto.name;
-    findBook.author = updateBookDto.author;
-    findBook.description = updateBookDto.description;
-    findBook.cover = updateBookDto.cover;
-
-    await this.dbService.write(books);
-
-    return findBook;
+    return await this.prisma.book.update({
+      data: updateBookDto,
+      where: {
+        id: updateBookDto.id,
+      },
+    });
   }
 
   async delete(id: number) {
-    const books: Book[] = await this.dbService.read();
-    const index = books.findIndex((item) => item.id === id);
-    if (index !== -1) {
-      books.splice(index, 1);
-      await this.dbService.write(books);
-    }
+    return await this.prisma.user.delete({
+      where: {
+        id,
+      },
+    });
   }
 }

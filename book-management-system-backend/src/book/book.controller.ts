@@ -8,7 +8,9 @@ import {
   ParseIntPipe,
   Post,
   Put,
+  Query,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { BookService } from './book.service';
@@ -17,8 +19,10 @@ import { UpdateBookDto } from './dto/update-book.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as path from 'node:path';
 import { storage } from './my-file-storage';
+import { LoginGuard } from '../user/login.guard';
 
 @Controller('book')
+@UseGuards(LoginGuard)
 export class BookController {
   constructor(private readonly bookService: BookService) {}
 
@@ -46,8 +50,14 @@ export class BookController {
   }
 
   @Get('list')
-  async list() {
-    return this.bookService.list();
+  async list(
+    @Query() query: { page: number; pageSize: number; search: string },
+  ) {
+    return this.bookService.list({
+      page: +query.page,
+      pageSize: +query.pageSize,
+      search: query.search,
+    });
   }
 
   @Get(':id')

@@ -2,48 +2,58 @@ import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { DbService } from '../db/db.service';
-import { User } from './entities/user.entity';
+import * as crypto from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
+import { JwtService } from '@nestjs/jwt';
+
+function md5(str: string) {
+  return crypto.createHash('md5').update(str).digest('hex');
+}
 
 @Injectable()
 export class UserService {
   @Inject(DbService)
   dbService: DbService;
+  @Inject(PrismaService)
+  prisma: PrismaService;
+  @Inject(JwtService)
+  jwtService: JwtService;
   async create(createUserDto: CreateUserDto) {
-    const users: User[] = await this.dbService.read();
-    const foundUser = users.find(
-      (item) => item.username === createUserDto.username,
-    );
+    const user = await this.prisma.user.findUnique({
+      where: {
+        username: createUserDto.username,
+      },
+    });
+    if (user) {
+      throw new BadRequestException('用户已存在');
+    }
     if (createUserDto.password !== createUserDto.passwordConfirm) {
       throw new BadRequestException('密码不一致');
     }
-    if (foundUser) {
-      throw new BadRequestException('用户已存在！');
-    }
-
-    const user = new User();
-    user.username = createUserDto.username;
-    user.password = createUserDto.password;
-
-    users.push(user);
-    await this.dbService.write(users);
-
-    return user;
+    return await this.prisma.user.create({
+      data: {
+        username: createUserDto.username,
+        password: md5(createUserDto.password),
+      },
+    });
   }
 
   async login(updateUserDto: UpdateUserDto) {
-    const users: User[] = await this.dbService.read();
-    const foundUser = users.find(
-      (item) => item.username === updateUserDto.username,
-    );
-    if (!foundUser) {
-      throw new BadRequestException('用户名不存在');
+    const user = await this.prisma.user.findUnique({
+      where: {
+        username: updateUserDto.username,
+      },
+    });
+    if (!user) {
+      throw new BadRequestException('用户不存在');
     }
-
-    if (foundUser.password !== updateUserDto.password) {
+    if (user.password !== md5(updateUserDto.password)) {
       throw new BadRequestException('密码不正确');
     }
-
-    return foundUser;
+    return this.jwtService.signAsync({
+      username: user.username,
+      id: user.id,
+    });
   }
 
   findAll() {
